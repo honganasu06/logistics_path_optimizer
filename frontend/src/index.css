@@ -1,0 +1,171 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background: #0a0b14;
+    color: #f1f5f9;
+    overflow: hidden;
+  }
+}
+
+/* ── Leaflet fixes ─────────────────────────────────────── */
+.leaflet-container { width: 100%; height: 100%; }
+.leaflet-popup-content-wrapper {
+  background: #13151f !important;
+  border: 1px solid rgba(255,255,255,0.15) !important;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.8) !important;
+  border-radius: 14px !important;
+  color: #f1f5f9 !important;
+}
+.leaflet-popup-tip { background: #13151f !important; }
+.leaflet-control-zoom {
+  border: 1px solid rgba(255,255,255,0.12) !important;
+  border-radius: 10px !important;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6) !important;
+}
+.leaflet-control-zoom a {
+  background: #13151f !important;
+  color: rgba(255,255,255,0.75) !important;
+  border-bottom: 1px solid rgba(255,255,255,0.1) !important;
+  line-height: 28px !important;
+}
+.leaflet-control-zoom a:hover { background: #1e2030 !important; color: #fff !important; }
+
+/* ── Sidebar solid background ─────────────────────────── */
+.sidebar {
+  background: #0f1020;
+  border-right: 1px solid rgba(255,255,255,0.1);
+  box-shadow: 4px 0 40px rgba(0,0,0,0.6);
+}
+
+/* ── Glass cards inside sidebar ───────────────────────── */
+.card {
+  background: #1a1d2e;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+}
+.card-hover:hover {
+  background: #1f2235;
+}
+
+/* ── Input fields ─────────────────────────────────────── */
+.field {
+  background: #1a1d2e;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  color: #f1f5f9;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field:focus { border-color: #f97316; }
+
+/* ── Buttons ──────────────────────────────────────────── */
+.btn {
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  border: none;
+}
+.btn:active { transform: scale(0.97); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-primary {
+  background: linear-gradient(135deg, #f97316, #ec4899);
+  color: white;
+  box-shadow: 0 4px 20px rgba(249,115,22,0.3);
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.1); }
+
+.btn-secondary {
+  background: #1a1d2e;
+  color: rgba(255,255,255,0.8);
+  border: 1px solid rgba(255,255,255,0.12);
+}
+.btn-secondary:hover:not(:disabled) { background: #252840; color: white; }
+
+.btn-blue {
+  background: linear-gradient(135deg, #3b82f6, #6366f1);
+  color: white;
+  box-shadow: 0 4px 20px rgba(59,130,246,0.25);
+}
+.btn-blue:hover:not(:disabled) { filter: brightness(1.1); }
+
+.btn-ghost {
+  background: transparent;
+  color: rgba(255,255,255,0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+.btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.85); }
+
+/* ── Map style overlay buttons ────────────────────────── */
+.map-overlay {
+  background: #0f1020;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+}
+
+/* ── Scrollbar ────────────────────────────────────────── */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+.custom-scrollbar::-webkit-scrollbar { width: 4px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+.custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.3); }
+
+/* ── Animations ───────────────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+@keyframes slide-in {
+  from { transform: translateX(-100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-slide-in { animation: slide-in 0.3s ease both; }
+.animate-fade-in  { animation: fade-in 0.25s ease both; }
+
+/* ── Status dot ───────────────────────────────────────── */
+.dot-online  { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+.dot-offline { background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+.dot-checking { background: #94a3b8; animation: pulse-dot 1.2s ease-in-out infinite; }
+
+/* ── Tab active indicator ─────────────────────────────── */
+.tab-active {
+  color: white;
+  border-bottom: 2px solid #f97316;
+}
+.tab-inactive {
+  color: rgba(255,255,255,0.45);
+  border-bottom: 2px solid transparent;
+}
+.tab-inactive:hover { color: rgba(255,255,255,0.75); }
+
+/* ── DAA grid ─────────────────────────────────────────── */
+.daa-cell {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.12s;
+}

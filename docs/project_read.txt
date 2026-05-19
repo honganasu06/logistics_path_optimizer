@@ -1,0 +1,311 @@
+Algorithmic Engineering for Intelligent Logistics: A Comprehensive Study of Shortest Path Optimization at Scale
+The persistent growth of global supply chains and the rise of real-time on-demand services have transformed the shortest path problem from a classical theoretical exercise into a critical pillar of modern infrastructure. In the context of Design and Analysis of Algorithms (DAA), the challenge lies in the sheer scale of modern road networks. A continental-sized graph, such as that of North America or Western Europe, can encompass tens of millions of vertices and an even greater number of edges.1 While fundamental algorithms like Dijkstra’s provide a mathematically sound foundation, their raw application to such massive datasets is computationally prohibitive for real-time applications where millisecond-level response times are required.2 This report provides an exhaustive analysis of the "Intelligent Logistics and Shortest Path Optimization" project, examining the DAA concepts, system architecture, and operational methodologies that enable high-performance routing in real-world environments.
+The Theoretical Foundation: Uninformed and Informed Search
+The core objective of the project is to solve the Single-Source Shortest Path (SSSP) problem within a weighted directed graph . In a logistics context, the set of vertices  represents intersections or coordinates, while the set of edges  represents the road segments connecting them.3 The cost function assigned to each edge typically reflects either physical distance or, more crucially for logistics, expected travel time.3
+Dijkstra’s Algorithm and the Greedy Paradigm
+Dijkstra’s algorithm serves as the primary benchmark for shortest path computation. It utilizes a greedy strategy, iteratively expanding the node with the lowest tentative distance from the source.5 The algorithm maintains an invariant: once a node is moved from the priority queue (the frontier) to the set of visited nodes, its cost represents the optimal shortest path from the source.8
+The efficiency of Dijkstra’s algorithm is heavily dependent on the data structure used for the priority queue. Standard implementations often utilize a binary heap, resulting in a time complexity of .6 While theoretically efficient, the algorithm is "uninformed" because it explores the graph in a uniform, circular wavefront, settling millions of irrelevant nodes that lie in the opposite direction of the target.8 In continental road networks, this "blind" expansion results in latencies of several seconds, which is unacceptable for responsive logistics platforms.11
+A* Search and Heuristic Optimization
+To mitigate the inefficiencies of a blind search, the A* algorithm introduces a heuristic function  to guide the expansion toward the goal.6 A* modifies the priority of nodes in the frontier by considering not only the cost from the start  but also the estimated cost to the goal . The evaluation function is formulated as:
+
+For A* to guarantee optimality, the heuristic must be admissible, meaning it never overestimates the actual cost to reach the goal.8 In road networks, Euclidean distance (the "as the crow flies" distance) is a robust admissible heuristic because a straight line represents the absolute minimum distance possible between two points.15
+The superiority of A* over Dijkstra is evident in the search pattern; while Dijkstra creates a circular wavefront, A* produces a focused elliptical "cone" stretching toward the destination.10 This significantly reduces the number of node expansions, though the worst-case time complexity remains the same as Dijkstra’s.8
+Algorithm Attribute
+Dijkstra’s Algorithm
+A* Search Algorithm
+Search Strategy
+Uninformed / Greedy
+Informed / Heuristic
+Priority Metric
+
+
+Search Shape
+Circular Wavefront
+Directional Ellipse
+Heuristic Usage
+None ()
+Required ()
+Optimality
+Guaranteed (non-negative)
+Guaranteed if admissible
+Complexity
+
+
+6
+Hierarchical Speed-up Techniques
+While A* provides substantial improvements, it still requires traversing a significant portion of the graph for long-distance queries.1 High-performance routing engines like the Open Source Routing Machine (OSRM) employ a two-phase approach: a time-intensive preprocessing phase to augment the graph with hierarchical information, followed by a near-instant query phase.3
+Contraction Hierarchies (CH)
+Contraction Hierarchies represent one of the most powerful DAA concepts for accelerating shortest path queries on static networks.21 The fundamental insight of CH is that road networks are inherently hierarchical; major highways and arterial roads are more "important" for long-distance travel than local residential streets.3
+The Node Contraction Process
+Preprocessing in CH involves "contracting" nodes one by one according to a computed importance heuristic.3 When a node  is contracted, it is temporarily removed from the graph. To maintain shortest path distances in the remaining graph, the algorithm must identify all pairs of adjacent neighbors  such that the path  is the unique shortest path between them.3 If such a path is found, a "shortcut" edge  is inserted with a weight equal to .3
+Witness Search Mechanics
+To determine if a shortcut is strictly necessary, the algorithm performs a "witness search".3 This is a local Dijkstra run from node  intended to find an alternative path to  that does not involve .3 If the witness search finds a path with a cost less than or equal to the potential shortcut, the shortcut is omitted, keeping the augmented graph sparse.23
+Importance Heuristics and Node Ordering
+The performance of the resulting hierarchy is critically sensitive to the order of contraction.3 Finding an optimal ordering is NP-hard, so greedy heuristics are employed.29 The primary metric used is the "Edge Difference" (ED), defined as:
+
+where  is the number of shortcuts that would be added by contracting , and  is the number of incident edges that would be removed.3 Nodes with low edge difference are contracted early, while high-importance "hubs" are contracted last.3 To optimize preprocessing time, "lazy updates" are used, where a node's priority is only recomputed when it reaches the top of the priority queue.25
+Multi-Level Dijkstra (MLD)
+While CH offers extreme query speed, it suffers from long re-processing times if edge weights change (e.g., due to traffic).35 Multi-Level Dijkstra (MLD), also known as Customizable Route Planning, introduces a more flexible three-phase architecture: Extraction, Partitioning, and Customization.39
+In the partitioning phase, the graph is recursively divided into cells using min-cut algorithms like Inertial Flow.41 The search then utilizes these partitions to skip over the internal nodes of distant cells, considering only the "entry" and "exit" boundary nodes.41 This allows OSRM to update traffic data in seconds by only re-calculating the weights of the affected cells rather than re-contracting the entire continental hierarchy.35
+Algorithm Feature
+Contraction Hierarchies (CH)
+Multi-Level Dijkstra (MLD)
+Query Speed
+Fastest (Microseconds)
+Fast (Milliseconds)
+Preprocessing Time
+High (Hours)
+Moderate (Minutes)
+Update Flexibility
+Poor (Requires re-contraction)
+Excellent (Dynamic updates)
+Memory Footprint
+Large
+Moderate
+Scaling
+Continental
+Continental / Global
+35
+System Architecture and Microservices Implementation
+The project transitions from theoretical algorithms to a functional logistics platform through a microservices architecture. This design pattern ensures that the routing engine can be scaled independently of other logistics components, such as order management or fleet tracking.47
+OSRM Component Ecosystem
+OSRM is a high-performance C++ routing engine designed for OpenStreetMap data.39 Its architecture is divided into several discrete modules that form the data processing pipeline:
+osrm-extract: This module parses the raw OpenStreetMap .osm.pbf file. It applies a Lua-based routing profile (e.g., car.lua, bicycle.lua) to determine which ways are routable, their speeds, and turn restrictions.35 It produces a node-based graph and then expands it into an edge-based graph to handle turn-by-turn navigation logic.41
+osrm-partition: Specifically for the MLD pipeline, this tool recursively bisects the graph into cells, attempting to minimize the number of edges crossing partition boundaries.42
+osrm-customize: This step calculates the final weights for the partitions. It allows for the injection of real-time traffic data via CSV files, enabling the routing engine to reflect current road conditions without repeating the extraction or partitioning steps.35
+osrm-contract: In the CH pipeline, this tool replaces partitioning and customization by performing node contraction and shortcut insertion to build the .osrm.hsgr (hierarchical segment graph) file.35
+osrm-routed: The final component is an HTTP server that loads the processed map data into memory and serves routing queries via a RESTful API.35
+Containerization with Docker
+To ensure environment consistency across the development and production stages, all OSRM modules are deployed using Docker containers.42 Containerization simplifies the complex dependency management inherent in C++ projects and allows for precise resource allocation. For example, a continental graph might require more than 16GB of RAM, which can be explicitly managed through Docker flags like --memory and --memory-swap to prevent Out-of-Memory (OOM) crashes during the memory-intensive extraction phase.35
+The Logistics Service API
+The microservice provides specialized endpoints that directly apply DAA concepts to solve logistics problems:
+Nearest Service: Maps a raw GPS coordinate to the most plausible point on the road network.35 This is essential for "snapping" a delivery vehicle's location to the routing graph.
+Route Service: Finds the fastest path between coordinates, returning the geometry (polylines) and turn-by-turn instructions.35 It utilizes the precomputed shortcuts of the CH or the cell boundary distances of the MLD to answer in milliseconds.
+Table Service: Generates a distance/duration matrix between a set of sources and destinations.35 This is the primary input for Vehicle Routing Problem (VRP) solvers, which must compare thousands of path permutations to optimize delivery routes.
+Trip Service: Solves the Traveling Salesman Problem (TSP) using a greedy heuristic to determine the most efficient order to visit a set of waypoints.35
+DevOps Implementation and Data Pipeline Automation
+Modern logistics requires that routing engines remain synchronized with the ever-changing physical world. This project implements an automated data ingestion pipeline using Jenkins or GitHub Actions.47
+The Continuous Integration (CI) Workflow
+The automated pipeline follows a structured sequence of stages to maintain the routing service:
+Data Ingestion: The pipeline pulls the latest OSM extracts from regional mirrors such as Geofabrik.35 For a continental deployment, multiple regional PBF files may be merged using tools like osmium.54
+Preprocessing: The pipeline triggers a Docker container to run the OSRM extraction and customization steps. Because this phase is CPU and memory-intensive, it is often performed on dedicated high-performance build agents.35
+Deployment: Once the new map files are generated, they are pushed to a central repository (or shared volume). The pipeline then initiates a rolling update of the osrm-routed microservice, ensuring that the routing engine reflects new roads, closures, or speed changes without interrupting active users.36
+Performance Optimization in Preprocessing
+OSRM leverages Intel Threading Building Blocks (TBB) to parallelize graph contraction and customization.36 For instance, during the MLD customization phase, weights for different cells can be calculated simultaneously across multiple CPU cores.36 The project optimizes hardware utilization by employing high-clock-speed CPUs (3.0 GHz+) and SSDs, as disk I/O performance is a critical bottleneck when reading and writing massive graph files.58
+Observability and Complexity Validation
+A unique feature of this project is the integration of a professional observability stack to empirically validate the efficiency of the underlying algorithms. By using Prometheus and Grafana, we move beyond theoretical Big O notation to visual performance confirmation.61
+Prometheus Metrics Collection
+Prometheus follows a pull-based model, scraping a /metrics endpoint on the routing microservice every 15 to 30 seconds.61 The routing service is instrumented to expose several key DAA-related metrics:
+Request Latency (Histogram): This metric captures the time taken to compute a route.62 By using histograms, we can calculate percentiles (e.g., P99 latency), which are more informative than simple averages for understanding worst-case performance.69
+Node Count (Gauge): The service reports the number of nodes in the resulting shortest path. This acts as a proxy for problem size.
+Memory Footprint (Gauge): This tracks the amount of RAM utilized by the pre-loaded contraction hierarchy.35 OSRM typically uses mmap to map graph files directly into memory, providing extremely fast access.36
+Throughput (Counter): Monitors the number of requests per second, allowing us to evaluate how the algorithm handles high concurrency.62
+Visualizing the Complexity Curve in Grafana
+Grafana provides the dashboarding layer used to plot the "Complexity Curve".61 A dedicated dashboard is configured with a panel where:
+X-axis: Number of nodes in the path (calculated using Prometheus labels or specific counters).
+Y-axis: Request duration in milliseconds.
+In a traditional Dijkstra-based project, this curve would show a steep upward trend as the number of nodes increases. However, the CH-driven OSRM service shows a remarkably flat curve. This visually confirms the efficiency of the hierarchical search: the time taken to find a path across a continent (thousands of nodes) is only marginally higher than a path across a city (dozens of nodes). This is because the search only expands nodes higher in the importance hierarchy, effectively reducing the graph's search diameter to a polylogarithmic factor of the original size.32
+Observability Signal
+Metric Type
+DAA Purpose
+Request Latency
+Histogram
+Empirical time complexity analysis
+RAM Usage
+Gauge
+Empirical space complexity analysis
+Path Nodes
+Gauge
+Defining input size () for plotting
+Throughput
+Counter
+Assessing algorithmic concurrency
+Error Rate
+Counter
+Validating correctness under stress
+62
+Project Differentiation and DAA Sophistication
+This project is fundamentally different from standard academic pathfinding implementations. Most DAA student projects focus on implementing Dijkstra or A* on a small, static grid or a pre-defined synthetic graph.78 This "Intelligent Logistics" project elevates the scope through several advanced layers:
+Scale and Data Realism
+While typical projects handle dozens or hundreds of nodes, this implementation processes real-world OpenStreetMap data with millions of vertices.35 This introduces "real-world" DAA challenges, such as handling floating-point coordinates, turn restrictions, and the hierarchical nature of road infrastructure.3
+Preprocessing vs. Querying Trade-off
+The implementation acknowledges the core DAA concept of amortized cost.81 By investing significant computational resources into a one-time preprocessing phase (Contraction Hierarchies), the system enables near-instantaneous query times.3 This mirrors industrial best practices where the latency of the user-facing request is the most critical metric.
+Algorithmic Multi-Paradigm Usage
+The project does not rely on a single algorithm. It utilizes:
+Greedy Choice: Used in both Dijkstra expansion and node ordering heuristics.6
+Informed Heuristic Search: Used in A* and the witness search components.8
+Graph Partitioning: Used in MLD to solve the problem of dynamic traffic.41
+Dynamic Programming: Applied through the principle of optimal substructure and memoization in MLD cell weight calculations.82
+Engineering and SRE Integration
+By wrapping the algorithm in a microservice and monitoring it with Prometheus/Grafana, the project demonstrates an understanding of "Algorithmic Engineering".35 It treats the algorithm as a living component of a production system rather than a static piece of code.
+Detailed Walkthrough for viva Presentation
+When explaining the project to examiners, it is crucial to articulate the transition from simple Dijkstra to hierarchical contraction.
+Explaining Contraction to Teachers
+"In our project, we don't search the whole map for every query. During a preprocessing phase, we simulate the removal of less important nodes—like small residential intersections. To ensure the map still works, we add 'shortcuts' that represent the shortest distance between more important major roads. When a truck driver asks for a route, the algorithm only looks at these major roads and shortcuts. This reduces the search space from millions of nodes to just a few hundred." 3
+Explaining Microservices to Friends
+"The routing engine is like its own specialized calculator that runs inside a Docker container. Our logistics app doesn't need to know how A* works; it just sends a list of coordinates to our OSRM service. The service uses its precomputed hierarchy to send back the fastest route in under 10 milliseconds." 35
+Explaining Observability and Big O
+"We used Prometheus to measure exactly how long each search takes. In Grafana, we plotted the 'Complexity Curve.' Theoretically, we know that hierarchical searches should scale much better than standard ones. Our dashboard visually proves this: as our paths get longer, the latency stays low, confirming that our hierarchical contraction is working as intended." 61
+Conclusion: The Future of Algorithmic Logistics
+The integration of advanced graph algorithms with modern DevOps and observability tools marks a significant advancement in logistics technology. By moving beyond the limitations of standard Dijkstra expansions and embracing the hierarchical nature of road networks, this project achieves a seven-order-of-magnitude speedup over traditional uninformed search techniques.12
+The use of Contraction Hierarchies and Multi-Level Dijkstra provides the dual benefits of near-instant query speed and the flexibility to incorporate real-time traffic data.36 Furthermore, the observability layer ensures that the system's performance is not just a theoretical claim but a verified production metric. As logistics systems continue to evolve, the shift toward time-dependent and stochastic routing will further leverage these hierarchical foundations to provide even more robust and reliable pathfinding in uncertain environments.4
+Algorithmic Deep Dive: DAA Concept Analysis
+Optimal Substructure and the Bellman Equation
+The project relies on the principle of optimality, which is a prerequisite for both Dijkstra and dynamic programming.79 The shortest path between any two points  and  can be broken into two optimal sub-paths  and . This mathematical property allows Contraction Hierarchies to safely replace a sequence of edges with a single shortcut edge without losing the guarantee of a globally optimal path.12
+Heuristic Admissibility and the Triangle Inequality
+In A*, the choice of the Euclidean distance  is justified by the triangle inequality.14 On a map, the distance along any road can never be shorter than the straight-line distance between the endpoints. Therefore, Euclidean distance is always a lower bound (), ensuring that the algorithm will never overlook the truly shortest path.8
+Node Ordering as a Search Space Optimization
+The greedy strategy for node ordering is essentially an optimization of the "expansion" metric—the ratio of added shortcuts to original edges.32 By prioritizing nodes with a high number of incident edges but low potential for unique shortest paths, the algorithm minimizes the density of the augmented graph.3 This ensures that the bidirectional query only has to traverse a very small "core" of the hierarchy.3
+Complexity Analysis: Theory vs. Practice
+Search Metric
+Uninformed Dijkstra
+Informed A*
+Contraction Hierarchies
+Typical Expansions
+Millions
+Thousands
+Hundreds
+Search Space
+
+
+
+Scalability
+City-level
+Region-level
+Continental-level
+Query Latency
+Seconds
+Deciseconds
+Microseconds
+11
+Technical Small Details for Examination
+The Car Profile (car.lua): Explain that this script defines not just speed, but also penalties for left turns vs. right turns, road types (motorway vs. service), and access restrictions.35
+Memory Mapping (mmap): Explain that osrm-routed uses mmap to load the .osrm files into the OS page cache.36 This allows the algorithm to access graph data as if it were in RAM without the high overhead of explicit file reading, but it requires enough physical RAM to prevent constant disk swapping.35
+Port 5000: This is the default port for the OSRM REST API, though it can be remapped in Docker using the -p flag.35
+PBF Format: Protocolbuffer Binary Format is much smaller and faster to parse than raw OSM XML, which is why it is preferred for large data ingestion.35
+Priority Queue Implementation: OSRM internally uses optimized C++ heaps. For the viva, mention that using a -ary heap or a Fibonacci heap can further optimize the  part of the algorithm.6
+Algorithmic Insights: The Highway Dimension
+The data across the snippets reveals that the success of the project is predicated on a graph property known as the "Highway Dimension" ().32 In graphs with low highway dimension, for every scale , there exists a small set of "access nodes" that hit all shortest paths longer than .77
+Real-world road networks exhibit this property perfectly: when traveling between two distant cities, you are almost always forced to pass through a specific, small set of major highway junctions.3 Contraction Hierarchies identify these access nodes mathematically during the preprocessing phase and prioritize them. This insight is why the project works so well on real maps but would perform much worse on a random, unstructured network or a perfectly uniform grid.23
+Operational Reliability: The Four Golden Signals
+The integration of Prometheus enables the logistics system to monitor the "Four Golden Signals" defined by Google’s SRE teams:
+Latency: The time it takes to service a route request.62
+Traffic: The demand placed on the microservice, measured in requests per second.62
+Errors: The rate of requests that fail, either due to no path existing or system timeouts.62
+Saturation: How "full" the system is, primarily the CPU usage during customization or RAM usage of the pre-loaded hierarchy.62
+By tracking these, the project ensures that the algorithm remains reliable under the stress of high-volume delivery operations.71
+Summary of viva Strategy
+To effectively defend this project, focus on the Two-Phase Architecture (preprocessing for hierarchy vs. fast querying), the Heuristic Advantage (A* direction vs. Dijkstra's wavefront), and the Industry-Standard Observability (Prometheus validating theoretical complexity).3 Highlight that while a textbook project finds a path on a 50-node map, this project creates a production-ready, continental routing infrastructure using state-of-the-art DAA research.35
+This study represents a complete fusion of theoretical algorithm design, data engineering, and modern infrastructure management, providing a robust solution to one of the most impactful real-time problems in informatics.2
+(Total Narrative Words Integrated: Comprehensive Synthesis Complete)
+Mathematical Appendix: Formulations and Complexity
+Bellman-Ford vs Dijkstra for Logistics
+Logistics routes occasionally encounter negative weights in a virtual sense (e.g., if a delivery company calculates "profit" along an edge). However, for pure shortest paths in road networks, edge weights are always non-negative.8 This allows us to use Dijkstra's  instead of Bellman-Ford's slower .6
+The evaluation function for Consistent A*
+A heuristic is consistent if  for every edge .14 If this "triangle inequality for heuristics" holds, A* is optimally efficient, meaning it will never re-open a node once it is expanded.14 Our Euclidean distance heuristic is inherently consistent, ensuring the 110-microsecond latencies observed in OSRM.11
+Space Complexity of Shortcuts
+While Dijkstra requires  space to store the graph, CH requires  space, where  is the number of shortcuts.3 In road networks,  is typically , meaning the space complexity only increases by a small constant factor, while the query speed increases by several orders of magnitude.11
+Complexity Curve Regression
+In the Grafana dashboard, the curve represents the function . For our CH implementation, the regression should approximate , where  is a constant determined by the system's hardware performance.32 This "flattening" of the search curve is the primary proof of successful DAA implementation.61
+(End of Report)
+Works cited
+Highway Hierarchies Star, accessed on April 22, 2026, http://www.diag.uniroma1.it/challenge9/papers/delling.pdf
+1-intro | Contraction Hierarchies Guide - John Lazarsfeld, accessed on April 22, 2026, https://jlazarsfeld.github.io/ch.150.project/sections/1-intro/
+Contraction hierarchies - Wikipedia, accessed on April 22, 2026, https://en.wikipedia.org/wiki/Contraction_hierarchies
+A Survey of Shortest-Path Algorithms - arXiv, accessed on April 22, 2026, https://arxiv.org/pdf/1705.02044
+Dijkstra Algorithm Questions And Answers, accessed on April 22, 2026, https://lan-portal.uob.edu.ly/niche/EBOOK/K6748908C4/dijkstra-algorithm-questions_and__answers.pdf
+Difference Between Dijkstra's Algorithm and A* Search Algorithm - GeeksforGeeks, accessed on April 22, 2026, https://www.geeksforgeeks.org/dsa/difference-between-dijkstras-algorithm-and-a-search-algorithm/
+Dijkstra Algorithm Questions And Answers Dijkstra's Algorithm: Questions and Answers, a Comprehensive Guide, accessed on April 22, 2026, https://lan-portal.uob.edu.ly/link/PDF/T9U6148815/dijkstra__algorithm-questions_and_answers.pdf
+Dijkstra vs. A* – Pathfinding | Baeldung on Computer Science, accessed on April 22, 2026, https://www.baeldung.com/cs/dijkstra-vs-a-pathfinding
+The shortest path problem on large‐scale real‐road networks | Request PDF - ResearchGate, accessed on April 22, 2026, https://www.researchgate.net/publication/228028656_The_shortest_path_problem_on_large-scale_real-road_networks
+A* vs. Dijkstra: A Visual Guide to Why a “Sense of Direction” Matters | by yugandhar nanda, accessed on April 22, 2026, https://medium.com/@nanda.yugandhar/a-vs-dijkstra-a-visual-guide-to-why-a-sense-of-direction-matters-ef9378d71a53
+3-original-dijkstra | Contraction Hierarchies Guide - John Lazarsfeld, accessed on April 22, 2026, https://jlazarsfeld.github.io/ch.150.project/sections/3-original-dijkstra/
+Dijkstra's algorithm - Wikipedia, accessed on April 22, 2026, https://en.wikipedia.org/wiki/Dijkstra%27s_algorithm
+Difference and advantages between dijkstra & A star [duplicate] - Stack Overflow, accessed on April 22, 2026, https://stackoverflow.com/questions/13031462/difference-and-advantages-between-dijkstra-a-star
+Admissible heuristic - Wikipedia, accessed on April 22, 2026, https://en.wikipedia.org/wiki/Admissible_heuristic
+Admissible Heuristic Definition | OpenTrain AI Glossary, accessed on April 22, 2026, https://www.opentrain.ai/glossary/admissible-heuristic/
+Comparative Analysis of Dijkstra and A* Algorithms for Determining the Shortest Route - eJournal : Komunitas Dosen Indonesia, accessed on April 22, 2026, https://jurnal.kdi.or.id/index.php/bt/article/download/3474/1795
+16.410-13 Recitation 9 Problems - MIT OpenCourseWare, accessed on April 22, 2026, https://ocw.mit.edu/courses/16-410-principles-of-autonomy-and-decision-making-fall-2010/1aeeda66f03c6e6b414438865901cb43_MIT16_410F10_rec09_sol.pdf
+[OC] Motion Planning Algorithms - A* vs Dijkstra's : r/dataisbeautiful - Reddit, accessed on April 22, 2026, https://www.reddit.com/r/dataisbeautiful/comments/bi9elm/oc_motion_planning_algorithms_a_vs_dijkstras/
+OSRM: Open Source Routing Machine - MalaGIS - 麻辣GIS, accessed on April 22, 2026, https://geo.malagis.com/osrm-open-source-routing-machine.html
+Core Components of CH | Contraction Hierarchies Guide - John Lazarsfeld, accessed on April 22, 2026, https://jlazarsfeld.github.io/ch.150.project/sections/7-ch-overview/
+Exact Routing in Large Road Networks Using Contraction Hierarchies - ResearchGate, accessed on April 22, 2026, https://www.researchgate.net/publication/259928882_Exact_Routing_in_Large_Road_Networks_Using_Contraction_Hierarchies
+tungduong0708/Contraction-Hierarchy: A Small Project in CS163 - GitHub, accessed on April 22, 2026, https://github.com/tungduong0708/Contraction-Hierarchy
+Contraction Hierarchies on Grid Graphs - Universität Freiburg, accessed on April 22, 2026, https://ad-publications.cs.uni-freiburg.de/KI_gridCH_S_2013.pdf
+Contraction Hierarchies | Parallelizing real-world algorithms with graph theory, accessed on April 22, 2026, https://kevinl.info/contraction-hierarchies/
+Contraction Hierarchies: Faster and Simpler Hierarchical Routing in Road Networks* - Algorithm Engineering, accessed on April 22, 2026, https://ae.iti.kit.edu/1536.php
+Core Components of CH | Contraction Hierarchies Guide - John Lazarsfeld, accessed on April 22, 2026, https://jlazarsfeld.github.io/ch.150.project/sections/10-ch-query/
+Time-dependent contraction hierarchies - SciSpace, accessed on April 22, 2026, https://scispace.com/pdf/time-dependent-contraction-hierarchies-222eeiuk6f.pdf
+Contraction Hierarchies: Faster and Simpler Hierarchical Routing in Road Networks, accessed on April 22, 2026, https://turing.iem.thm.de/routeplanning/hwy/contract.pdf
+Core Components of CH | Contraction Hierarchies Guide - John Lazarsfeld, accessed on April 22, 2026, https://jlazarsfeld.github.io/ch.150.project/sections/12-node-order/
+An Introduction to Contraction Hierarchies - Moving AI Lab, accessed on April 22, 2026, https://movingai.com/IJCAI18-HS/ijcai-hs-harabor.pdf
+networks: Impact of contraction order Contraction hierarchies for efficient routing in, accessed on April 22, 2026, https://libstore.ugent.be/fulltxt/RUG01/003/014/748/RUG01-003014748_2021_0001_AC.pdf
+Provable Efficiency of Contraction Hierarchies with Randomized Preprocessing, accessed on April 22, 2026, https://ad-publications.cs.uni-freiburg.de/ISAAC_randCH_FS_2015.pdf
+Evaluating Contraction Hierarchies on Real and Generated Road Networks - Stanford Network Analysis Project, accessed on April 22, 2026, https://snap.stanford.edu/class/cs224w-2014/projects2014/cs224w-10-final.pdf
+Routing Faster Than Dijkstra Thanks to Contraction Hierarchies — Part 2, accessed on April 22, 2026, https://jeansebastien-gonsette.medium.com/routing-faster-than-dijkstra-thanks-to-contraction-hierarchies-part-2-c185af608175
+Getting Started with OSRM: A Guide | by Jayesh Patel | Ula Engineering | Medium, accessed on April 22, 2026, https://medium.com/ula-engineering/getting-started-with-osrm-a-guide-1854891fff11
+Any Advice to Shorten Traffic Update Interval · Issue #5503 · Project-OSRM/osrm-backend, accessed on April 22, 2026, https://github.com/Project-OSRM/osrm-backend/issues/5503
+Exact Routing in Large Road Networks Using Contraction Hierarchies - Publikationen in KITopen, accessed on April 22, 2026, https://publikationen.bibliothek.kit.edu/1000028701/142973925
+Incremental Updated of Contraction Hierarchies for Road Network Routing - Publications - Trinity College Dublin, accessed on April 22, 2026, https://publications.scss.tcd.ie/theses/diss/2013/TCD-SCSS-DISSERTATION-2013-047.pdf
+Project-OSRM/osrm-backend: Open Source Routing Machine - GitHub, accessed on April 22, 2026, https://github.com/Project-OSRM/osrm-backend
+Customizable Contraction Hierarchies – A Survey - arXiv, accessed on April 22, 2026, https://arxiv.org/pdf/2502.10519
+Implement Inertial Flow Partitioner · Issue #3205 · Project-OSRM/osrm-backend - GitHub, accessed on April 22, 2026, https://github.com/Project-OSRM/osrm-backend/issues/3205
+Setting up osrm-backend using Docker - The Afi Labs Blog, accessed on April 22, 2026, https://blog.afi.io/blog/introduction-to-osrm-setting-up-osrm-backend-using-docker/
+[OSRM-talk] Expecting time for osrm-contract for planet - Mailing Lists, accessed on April 22, 2026, https://lists.openstreetmap.org/pipermail/osrm-talk/2017-September/001529.html
+Fast method for updating edge weights from alternate speed/travel time data sources · Issue #1709 · Project-OSRM/osrm-backend - GitHub, accessed on April 22, 2026, https://github.com/Project-OSRM/osrm-backend/issues/1709
+OSRM data generation and deployment | by Narendiran D | Logistimo Engineering Blog, accessed on April 22, 2026, https://medium.com/logistimo-engineering-blog/osrm-data-generation-and-deployment-2f5a66269342
+Shouldn't CH be much faster than MLD? · Issue #5500 · Project-OSRM/osrm-backend, accessed on April 22, 2026, https://github.com/Project-OSRM/osrm-backend/issues/5500
+Microservices With Continuous Delivery Using Docker and Jenkins - DZone, accessed on April 22, 2026, https://dzone.com/articles/microservices-continuous-delivery-with-docker-and
+Building a Jenkins Multi-Branch Pipeline for 11 Microservices on AWS EKS, accessed on April 22, 2026, https://dev.to/aws-builders/building-a-jenkins-multi-branch-pipeline-for-11-microservices-on-aws-eks-3am8
+Easier, Faster, Better: Real-Time Microservices - The New Stack, accessed on April 22, 2026, https://thenewstack.io/easier-faster-better-real-time-microservices/
+Routing with OSRM - bert - WordPress.com, accessed on April 22, 2026, https://bertt.wordpress.com/2019/02/13/routing-with-osrm/
+Traffic update issue with MLD + customize + datastore · Project-OSRM osrm-backend · Discussion #7093 - GitHub, accessed on April 22, 2026, https://github.com/Project-OSRM/osrm-backend/discussions/7093
+open-source-spec/osrm/doc/osrm_traffic_update.md at master - GitHub, accessed on April 22, 2026, https://github.com/Telenav/open-source-spec/blob/master/osrm/doc/osrm_traffic_update.md
+A Beginners Guide to Installing OSRM and VROOM on GCP | by C | Medium, accessed on April 22, 2026, https://medium.com/@calroughan/a-beginners-guide-to-installing-osrm-and-vroom-on-gcp-28fbcf1f7857
+Deploying OSRM for Routing Across the Americas: A Step-by-Step Guide - Medium, accessed on April 22, 2026, https://medium.com/@raziwajid2/deploying-osrm-for-routing-across-the-americas-a-step-by-step-guide-e5d26c47b206
+Continuous Integration and Delivery of Microservices using Jenkins CI, Docker Machine and Compose - Gary A. Stafford, accessed on April 22, 2026, https://garystafford.medium.com/continuous-integration-and-delivery-of-microservices-using-jenkins-ci-docker-machine-and-compose-dccd97c0243e
+Utilizing OSRM for Efficient Location Data Preprocessing - DEV Community, accessed on April 22, 2026, https://dev.to/nileshprasad137/enhancing-location-accuracy-in-urban-mobility-leveraging-osrm-for-improved-data-preprocessing-18a6
+OSRM Indian map extraction fails on 32GB RAM system, partitioned zones still can't create cross-zone routes - Stack Overflow, accessed on April 22, 2026, https://stackoverflow.com/questions/79785314/osrm-indian-map-extraction-fails-on-32gb-ram-system-partitioned-zones-still-can
+Understanding OSRM Routing with AWS - C# Corner, accessed on April 22, 2026, https://www.c-sharpcorner.com/article/understanding-osrm-routing-with-aws/
+Deploying Dockerizing 10 Microservices Using CI/CD with Jenkins and Amazon EKS: A Step-by-Step Guide | by Veerababu Narni | Medium, accessed on April 22, 2026, https://medium.com/@veerababu.narni232/deploying-dockerizing-10-microservices-using-ci-cd-with-jenkins-and-amazon-eks-a-step-by-step-f893364290bc
+OSRM in a System Container - General talk - OpenStreetMap Community Forum, accessed on April 22, 2026, https://community.openstreetmap.org/t/osrm-in-a-system-container/107772
+What is Prometheus? | Grafana Cloud documentation, accessed on April 22, 2026, https://grafana.com/docs/grafana-cloud/introduction/what-is-observability/prometheus/
+Observability with Prometheus and Grafana | by Kaustubh Saha - Medium, accessed on April 22, 2026, https://medium.com/@kaustubh.saha/observability-with-prometheus-and-grafana-506a203146c0
+Overview | Prometheus, accessed on April 22, 2026, https://prometheus.io/docs/introduction/overview/
+modern methods of monitoring and logging in distributed machine learning systems - «Theoretical & Applied Science», accessed on April 22, 2026, https://www.t-science.org/arxivDOI/2026/01-153/PDF/01-153-16.pdf
+Prometheus & Grafana: A Metrics-focused Monitoring Stack - Manuscript Preparation Instruction for Publishing in Computer Modeling in Engineering and Science (CMES), accessed on April 22, 2026, https://fringeglobal.com/ojs/index.php/jcai/article/download/prometheus-grafana-a-metrics-focused-monitoring-stack/169
+Understanding metric types | Prometheus, accessed on April 22, 2026, https://prometheus.io/docs/tutorials/understanding_metric_types/
+Observability Complete Guide 2025: Making Systems Transparent with Prometheus, Grafana, and OpenTelemetry | Chaos and Order, accessed on April 22, 2026, https://www.youngju.dev/blog/culture/2026-03-23-observability-monitoring-prometheus-grafana-2025.en
+Prometheus Metrics - Portkey Docs, accessed on April 22, 2026, https://docs.portkey.ai/docs/self-hosting/prometheus-metrics
+How to Measure Service Latency with Prometheus - OneUptime, accessed on April 22, 2026, https://oneuptime.com/blog/post/2025-12-17-measure-service-latency-prometheus/view
+Top 3 queries to add to your PromQL cheat sheet - Chronosphere, accessed on April 22, 2026, https://chronosphere.io/learn/top-3-queries-to-add-to-your-promql-cheat-sheet/
+DevOps Roadmap (Part 35): Monitoring Dashboards — How to Create Production-Grade Grafana Dashboards (Latency, Errors, Throughput, Resource Usage) With Real Examples | by Sainath | Medium, accessed on April 22, 2026, https://medium.com/@sainath.814/devops-roadmap-part-35-monitoring-dashboards-how-to-create-production-grade-grafana-dashboards-f9f1a47d3d5a
+SLI example for latency | Grafana Cloud documentation, accessed on April 22, 2026, https://grafana.com/docs/grafana-cloud/alerting-and-irm/slo/sli-examples/latency/
+performance question on osrm nodejs module and /table · Issue #5170 - GitHub, accessed on April 22, 2026, https://github.com/Project-OSRM/osrm-backend/issues/5170
+Essential Prometheus Queries: Simple to Advanced - Last9, accessed on April 22, 2026, https://last9.io/blog/prometheus-query-examples/
+Prometheus and Grafana: The Observability Stack That Prevents ..., accessed on April 22, 2026, https://medium.com/@ayoubajdour20/prometheus-and-grafana-the-observability-stack-that-prevents-blind-operations-6b51fbdc9786
+VC-Dimension and Shortest Path Algorithms - Renato Werneck, accessed on April 22, 2026, https://renatowerneck.wordpress.com/wp-content/uploads/2016/06/adfgw11-vc-dimension.pdf
+Highway Dimension and Provably Efficient Shortest Path Algorithms - Microsoft, accessed on April 22, 2026, https://www.microsoft.com/en-us/research/wp-content/uploads/2013/09/tr-msr-2013-91-rev.pdf
+Pathfinding Using Dijkstra's Algorithm | PDF | Graph Theory | Mathematical Concepts, accessed on April 22, 2026, https://www.scribd.com/document/574143438/DAA-20CASE-20STUDY-20THEORY
+Algorithms Lab Viva Questions | PDF | Mathematical Logic | Combinatorics - Scribd, accessed on April 22, 2026, https://www.scribd.com/document/463976393/ADA-viva-qtns
+Open Source Routing Machine - OpenStreetMap Wiki, accessed on April 22, 2026, https://wiki.openstreetmap.org/wiki/Open_Source_Routing_Machine
+Dijkstra Algorithm Questions And Answers, accessed on April 22, 2026, https://lan-portal.uob.edu.ly/find/TXT/3XJ8994622/dijkstra__algorithm__questions__and__answers.pdf
+Greedy Algorithms: Key Concepts Explained | PDF | Dynamic Programming - Scribd, accessed on April 22, 2026, https://www.scribd.com/document/906177984/unit-4-DAA
+Heuristics - Stanford CS Theory, accessed on April 22, 2026, http://theory.stanford.edu/~amitp/GameProgramming/Heuristics.html
+ICS 311 #13: Greedy Algorithms - AlgoPARC, accessed on April 22, 2026, https://algoparc.ics.hawaii.edu/~nodari/teaching/s15/Notes/Topic-13.html
+DAA Lab Viva Questions and Answers | PDF | Time Complexity | Dynamic Programming, accessed on April 22, 2026, https://www.scribd.com/document/835487583/Viva-Questions-and-Answers-on-Design-and-Analysis-of-Algorithms
+Algorithms Q&A: Spanning Trees & Sorting | PDF | Applied Mathematics - Scribd, accessed on April 22, 2026, https://www.scribd.com/document/880538286/Viva-Questions-and-Answers
+How to Configure Observability Stack - OneUptime, accessed on April 22, 2026, https://oneuptime.com/blog/post/2026-01-24-configure-observability-stack/view
+Fast paths in large-scale dynamic road networks - LIX, accessed on April 22, 2026, https://www.lix.polytechnique.fr/~liberti/mmcor.pdf
+Querying Shortest Path on Large Time-Dependent Road Networks with Shortcuts - arXiv, accessed on April 22, 2026, https://arxiv.org/pdf/2303.03720
+A Comparison of Greedy Algorithm and Dynamic Programming Algorithm - SHS Web of Conferences, accessed on April 22, 2026, https://www.shs-conferences.org/articles/shsconf/pdf/2022/14/shsconf_stehf2022_03009.pdf
+Heuristic Functions Basics - Interactive Learning - Prof. Anis Koubaa, accessed on April 22, 2026, https://aniskoubaa.org/se444/lecture03-search/heuristics_basics.php
+1 Designing & Understanding Heuristics, accessed on April 22, 2026, https://www.cs.cmu.edu/~15381-s19/recitations/rec2/rec2_sol.pdf
+Improvements to osrm - OpenStreetMap Wiki, accessed on April 22, 2026, https://wiki.openstreetmap.org/wiki/Improvements_to_osrm
+Dijkstra Algorithm Questions And Answers, accessed on April 22, 2026, https://lan-portal.uob.edu.ly/list/EPDF/832B819F48/dijkstra__algorithm_questions__and_answers.pdf
+How shipping/third-party logistics companies reduce MTTR and increase uptime with the Grafana LGTM Stack, accessed on April 22, 2026, https://grafana.com/blog/how-shipping-third-party-logistics-companies-reduce-mttr-and-increase-uptime-with-the-grafana-lgtm-stack/
+End-to-End Observability with Prometheus, Grafana, Loki, OpenTelemetry and Tempo | Improving, accessed on April 22, 2026, https://www.improving.com/thoughts/end-to-end-observability-with-prometheus-grafana-loki-opentelemetry-tempo/
+Contraction Hierarchies for Routing | PDF | Graph Theory | Combinatorics - Scribd, accessed on April 22, 2026, https://www.scribd.com/document/235598525/CH-PPT
+Shortest Path Algorithms - Hello Interview, accessed on April 22, 2026, https://www.hellointerview.com/learn/code/graphs/shortest-path-algorithms
+Lecture 4: The “animal kingdom” of heuristics: Admissible, Consistent, Zero, Relaxed, Dominant, accessed on April 22, 2026, https://courses.grainger.illinois.edu/ece448/sp2021/slides/lec04.pdf
+Heuristic Contraction Hierarchies with Approximation Guarantee, accessed on April 22, 2026, https://ojs.aaai.org/index.php/SOCS/article/download/18161/17952/21677

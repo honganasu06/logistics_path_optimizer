@@ -80,63 +80,225 @@ function StatsBar({ stats, label, color }: { stats: AlgoStats | null; label: str
   );
 }
 
-// ──────────────────────────────────────────────────────────────────────────────
-// Pathfinding algorithms (pure computation — no async)
-// ──────────────────────────────────────────────────────────────────────────────
-function computePath(
-  obstacles: boolean[][],
-  type: 'dijkstra' | 'astar'
+/**
+ * DIJKSTRA'S PATHFINDING ALGORITHM
+ * -----------------------------------------------------------------------------
+ * Explores the grid uniformly in all directions (radially/breadth-first manner).
+ * It calculates the shortest path by always expanding the unexplored node that 
+ * has the absolute lowest accumulated step cost (g-cost) from the start.
+ * 
+ * Perfect for finding the absolute shortest path when there is no heuristic 
+ * information or when path costs vary.
+ * 
+ * @param obstacles - A 2D grid of booleans where 'true' means a cell is blocked
+ */
+function computeDijkstraPath(
+  obstacles: boolean[][]
 ): { visitedOrder: { r: number; c: number }[]; pathKeys: Set<string>; nodesExplored: number } {
+  
+  // 1. DISTANCE DICTIONARY: Tracks the absolute lowest cost to reach any grid cell.
+  //    Key: "row,col" string (e.g. "3,5"), Value: accumulated path cost (number of steps)
   const dist: Record<string, number> = {};
+  
+  // 2. PARENT POINTERS: Tracks where we came from for each cell.
+  //    Essential to trace/backtrack the final shortest path once we reach the end.
+  //    Key: "row,col", Value: "parentRow,parentCol"
   const parent: Record<string, string> = {};
+  
+  // 3. Define START and END keys
   const startKey = `${START.r},${START.c}`;
   const endKey = `${END.r},${END.c}`;
+  
+  // 4. Base Case: Distance to the starting cell is 0
   dist[startKey] = 0;
 
-  const queue: { r: number; c: number; cost: number; h: number }[] = [
-    { r: START.r, c: START.c, cost: 0, h: 0 },
+  // 5. PRIORITY QUEUE (Open Set): Tracks unexplored nodes.
+  //    Each node is represented by its row 'r', column 'c', and accumulated 'cost' (g-cost).
+  const queue: { r: number; c: number; cost: number }[] = [
+    { r: START.r, c: START.c, cost: 0 },
   ];
 
+  // 6. VISITED ORDER: Tracks the order in which cells are popped/explored.
+  //    Used to feed the step-by-step visualization/animation on the frontend.
   const visitedOrder: { r: number; c: number }[] = [];
+  
+  // 7. DIRECTION VECTORS: Allowed movements in the grid (Right, Down, Left, Up)
   const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
 
+  // 8. EXPLORATION LOOP: Run until there are no more nodes to explore in our queue
   while (queue.length > 0) {
-    queue.sort((a, b) =>
-      type === 'astar' ? (a.cost + a.h) - (b.cost + b.h) : a.cost - b.cost
-    );
+    
+    // DIJKSTRA CORE: Always explore the node with the lowest g-cost first.
+    // We achieve this by sorting the queue in ascending order of 'cost'.
+    queue.sort((a, b) => a.cost - b.cost);
+    
+    // Dequeue (remove) the closest node from our sorted list
     const cur = queue.shift()!;
     const curKey = `${cur.r},${cur.c}`;
+    
+    // Record this cell as visited/explored
     visitedOrder.push({ r: cur.r, c: cur.c });
 
+    // DESTINATION REACHED CHECK: If we reached the target END cell, we can stop!
     if (cur.r === END.r && cur.c === END.c) break;
 
+    // 9. NEIGHBOR INSPECTION: Check all 4 adjacent directions (up, down, left, right)
     for (const [dr, dc] of dirs) {
       const nr = cur.r + dr;
       const nc = cur.c + dc;
+      
+      // BOUNDARY CHECK: Ensure the neighbor cell is within the grid limits
       if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) continue;
+      
+      // OBSTACLE CHECK: Skip this neighbor if it's blocked by a wall/obstacle
       if (obstacles[nr][nc]) continue;
+      
       const nKey = `${nr},${nc}`;
+      
+      // PATH COST CALCULATION: Distance to neighbor is current node's distance + 1 step cost
       const newCost = dist[curKey] + 1;
+      
+      // RELAXATION STEP: If this new path to the neighbor is shorter than any previously 
+      // recorded path, or if we have never visited this neighbor before:
       if (dist[nKey] === undefined || newCost < dist[nKey]) {
-        dist[nKey] = newCost;
-        parent[nKey] = curKey;
-        const h = type === 'astar' ? Math.abs(nr - END.r) + Math.abs(nc - END.c) : 0;
+        dist[nKey] = newCost;      // Update neighbor's shortest recorded distance
+        parent[nKey] = curKey;     // Set parent pointer to current node for backtracking
+        
+        // Push the neighbor into our priority queue to explore its branches later
+        queue.push({ r: nr, c: nc, cost: newCost });
+      }
+    }
+  }
+
+  // 10. PATH RECONSTRUCTION (Backtracking): Trace backward from END to START using parent pointers
+  const pathKeys = new Set<string>();
+  let cur = endKey;
+  while (cur && cur !== startKey) {
+    pathKeys.add(cur);
+    cur = parent[cur]; // Move to the parent node
+  }
+  pathKeys.add(startKey); // Include the start node in the final path list
+
+  // Return the exploration order, the optimal path keys, and the total explored count
+  return { visitedOrder, pathKeys, nodesExplored: visitedOrder.length };
+}
+
+/**
+ * A* (A-STAR) PATHFINDING SEARCH ALGORITHM
+ * -----------------------------------------------------------------------------
+ * An informed (heuristic) search algorithm. It is highly optimized compared to 
+ * Dijkstra because it estimates the remaining distance to the goal.
+ * 
+ * It directs its search bias towards the destination using the formula:
+ *     f(n) = g(n) + h(n)
+ * Where:
+ *     - g(n): Actual cost (number of steps) from START to current node
+ *     - h(n): Heuristic estimate (Manhattan Distance) from current node to END
+ *     - f(n): Total estimated cost of path through node n
+ * 
+ * By prioritizing the lowest f(n), A* dramatically reduces the number of nodes 
+ * it needs to explore, avoiding searching in useless/opposite directions.
+ * 
+ * @param obstacles - A 2D grid of booleans where 'true' means a cell is blocked
+ */
+function computeAstarPath(
+  obstacles: boolean[][]
+): { visitedOrder: { r: number; c: number }[]; pathKeys: Set<string>; nodesExplored: number } {
+  
+  // 1. ACTUAL DISTANCE (g-cost): Tracks the absolute lowest actual cost from START to any cell.
+  //    Key: "row,col", Value: accumulated step cost (g-cost)
+  const dist: Record<string, number> = {};
+  
+  // 2. PARENT POINTERS: Tracks where we came from for each cell to backtrack the final path.
+  //    Key: "row,col", Value: "parentRow,parentCol"
+  const parent: Record<string, string> = {};
+  
+  // 3. Define START and END keys
+  const startKey = `${START.r},${START.c}`;
+  const endKey = `${END.r},${END.c}`;
+  
+  // 4. Base Case: g-cost distance to the starting cell is 0
+  dist[startKey] = 0;
+
+  // 5. INITIAL HEURISTIC (h-cost): Manhattan Distance from START to END
+  //    Formula: |x1 - x2| + |y1 - y2| (ideal steps without obstacles)
+  const startH = Math.abs(START.r - END.r) + Math.abs(START.c - END.c);
+
+  // 6. PRIORITY QUEUE (Open Set): Tracks unexplored nodes.
+  //    Each node tracks: r (row), c (col), cost (g-cost), and h (heuristic h-cost to destination).
+  const queue: { r: number; c: number; cost: number; h: number }[] = [
+    { r: START.r, c: START.c, cost: 0, h: startH },
+  ];
+
+  // 7. VISITED ORDER: Tracks order of exploration for step-by-step UI animation.
+  const visitedOrder: { r: number; c: number }[] = [];
+  
+  // 8. DIRECTION VECTORS: Allowed movements in the grid (Right, Down, Left, Up)
+  const dirs = [[0, 1], [1, 0], [0, -1], [-1, 0]];
+
+  // 9. EXPLORATION LOOP: Run until there are no more nodes to explore in our queue
+  while (queue.length > 0) {
+    
+    // A* CORE: Prioritize nodes with the lowest total estimated f-cost: f(n) = g(n) + h(n).
+    // f-cost = (a.cost + a.h)
+    // We sort the queue in ascending order of this sum.
+    queue.sort((a, b) => (a.cost + a.h) - (b.cost + b.h));
+    
+    // Dequeue (remove) the node with the absolute lowest f-cost
+    const cur = queue.shift()!;
+    const curKey = `${cur.r},${cur.c}`;
+    
+    // Record this cell as visited/explored
+    visitedOrder.push({ r: cur.r, c: cur.c });
+
+    // DESTINATION REACHED CHECK: If we reached the target END cell, we can stop!
+    if (cur.r === END.r && cur.c === END.c) break;
+
+    // 10. NEIGHBOR INSPECTION: Check all 4 adjacent directions (up, down, left, right)
+    for (const [dr, dc] of dirs) {
+      const nr = cur.r + dr;
+      const nc = cur.c + dc;
+      
+      // BOUNDARY CHECK: Ensure the neighbor cell is within the grid limits
+      if (nr < 0 || nr >= GRID_SIZE || nc < 0 || nc >= GRID_SIZE) continue;
+      
+      // OBSTACLE CHECK: Skip this neighbor if it's blocked by a wall/obstacle
+      if (obstacles[nr][nc]) continue;
+      
+      const nKey = `${nr},${nc}`;
+      
+      // PATH COST CALCULATION: Distance to neighbor is current node's g-cost + 1 step cost
+      const newCost = dist[curKey] + 1;
+      
+      // RELAXATION STEP: If this new path to the neighbor is shorter than any previously 
+      // recorded path, or if we have never visited this neighbor before:
+      if (dist[nKey] === undefined || newCost < dist[nKey]) {
+        dist[nKey] = newCost;      // Update neighbor's shortest actual g-cost
+        parent[nKey] = curKey;     // Set parent pointer to current node for backtracking
+        
+        // HEURISTIC CALCULATION (h-cost): Manhattan distance from neighbor to END.
+        // Estimates how many grid steps are left to reach the destination.
+        const h = Math.abs(nr - END.r) + Math.abs(nc - END.c);
+        
+        // Push the neighbor into our priority queue to explore its branches later
         queue.push({ r: nr, c: nc, cost: newCost, h });
       }
     }
   }
 
-  // Backtrack path
+  // 11. PATH RECONSTRUCTION (Backtracking): Trace backward from END to START using parent pointers
   const pathKeys = new Set<string>();
   let cur = endKey;
   while (cur && cur !== startKey) {
     pathKeys.add(cur);
-    cur = parent[cur];
+    cur = parent[cur]; // Move to the parent node
   }
-  pathKeys.add(startKey);
+  pathKeys.add(startKey); // Include the start node in the final path list
 
+  // Return the exploration order, the optimal path keys, and the total explored count
   return { visitedOrder, pathKeys, nodesExplored: visitedOrder.length };
 }
+
 
 // ──────────────────────────────────────────────────────────────────────────────
 // Main component
@@ -265,8 +427,8 @@ export default function DAASimulation() {
     const t0 = Date.now();
 
     // Compute both synchronously first to get stats
-    const dijResult = computePath(obstacles, 'dijkstra');
-    const astarResult = computePath(obstacles, 'astar');
+    const dijResult = computeDijkstraPath(obstacles);
+    const astarResult = computeAstarPath(obstacles);
 
     const dijVisited = dijResult.visitedOrder;
     const astarVisited = astarResult.visitedOrder;
